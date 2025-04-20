@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Grid,
   Card,
@@ -14,113 +14,160 @@ import {
   TableRow,
   Paper,
   FormControlLabel,
-  Switch
+  Switch,
+  CircularProgress,
+  Box
 } from "@mui/material";
 
-// Mock data (replace with API calls)
-const teacherClasses = [
-  {
-    id: 1,
-    className: "Computer Science 1",
-    subject: "Data Structures",
-    timing: "10:00 AM - 11:00 AM", // Timing fetched from backend
-    students: [
-      { id: 1, name: "John Doe", sapId: "6009230069", rollNo: "C101" },
-      { id: 2, name: "Jane Smith", sapId: "60009340069", rollNo: "C102" },
-    ],
-  },
-  {
-    id: 2,
-    className: "Mech",
-    subject: "Linear Algebra",
-    timing: "02:00 PM - 03:00 PM", // Timing fetched from backend
-    students: [
-      { id: 3, name: "Bob Johnson", sapId: "60033993", rollNo: "MA201" },
-    ],
-  },
-];
-
 function MarkAttendance() {
+  const user = JSON.parse(localStorage.getItem("user")); // Assumes user object with sapId
+  const [teacherClasses, setTeacherClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState(null);
   const [attendance, setAttendance] = useState({});
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Fetch today's classes for this teacher on mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/teacher/today-classes/${user.sapId}`
+        );
+        const data = await res.json();
+        setTeacherClasses(data);
+      } catch {
+        setError("Failed to load classes.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchClasses();
+  }, [user.sapId]);
 
   const handleClassSelect = (cls) => {
     setSelectedClass(cls);
-
     // Initialize attendance state
     const initialAttendance = {};
     cls.students.forEach((student) => {
-      initialAttendance[student.id] = true; // default to present
+      initialAttendance[student.sapId] = true; // default to present
     });
     setAttendance(initialAttendance);
+    setSuccess("");
+    setError("");
   };
 
-  const handleAttendanceChange = (studentId) => (e) => {
+  const handleAttendanceChange = (sapId) => (e) => {
     setAttendance((prev) => ({
       ...prev,
-      [studentId]: e.target.checked,
+      [sapId]: e.target.checked,
     }));
   };
 
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
-  };
+  // Only allow today's date
+  const today = new Date().toISOString().split("T")[0];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setError("");
+    setSuccess("");
     if (!selectedDate) {
-      alert("Please select a date!");
+      setError("Please select a date!");
+      return;
+    }
+    if (selectedDate !== today) {
+      setError("You can only mark attendance for today!");
       return;
     }
 
-    // Validate that the selected date is today or a future date
-    const today = new Date().toISOString().split("T")[0];
-    if (selectedDate < today) {
-      alert("You cannot mark attendance for past dates!");
-      return;
+    // Prepare student attendance data
+    const studentsAttendance = selectedClass.students.map((student) => ({
+      sapId: student.sapId,
+      present: attendance[student.sapId] || false,
+    }));
+
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/teacher/mark-attendance",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            className: selectedClass.className,
+            subjectName: selectedClass.subject,
+            date: selectedDate,
+            students: studentsAttendance,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Attendance saved successfully!");
+        setTimeout(() => {
+          setSelectedClass(null);
+          setSuccess("");
+        }, 1500);
+      } else {
+        setError(data.message || "Failed to save attendance.");
+      }
+    } catch {
+      setError("Failed to connect to server.");
     }
-
-    // Send attendance data to backend
-    console.log("Attendance submitted:", { selectedDate, attendance });
-    alert("Attendance saved successfully!");
-
-    // Reset state
-    setSelectedClass(null);
-    setSelectedDate("");
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 5, textAlign: "center" }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   if (!selectedClass) {
     return (
       <div style={{ padding: 20 }}>
         <Typography variant="h4" gutterBottom>
-          Your Classes
+          Your Classes for Today
         </Typography>
-        <Grid container spacing={3}>
-          {teacherClasses.map((cls) => (
-            <Grid item xs={12} sm={6} md={4} key={cls.id}>
-              <Card
-                sx={{
-                  cursor: "pointer",
-                  "&:hover": { boxShadow: 3 },
-                }}
-                onClick={() => handleClassSelect(cls)}
-              >
-                <CardContent>
-                  <Typography variant="h6">{cls.className}</Typography>
-                  <Typography color="textSecondary" gutterBottom>
-                    {cls.subject}
-                  </Typography>
-                  <Typography variant="body2">
-                    Timing: {cls.timing}
-                  </Typography>
-                  <Typography variant="body2">
-                    Students: {cls.students.length}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        {error && (
+          <Typography color="error" sx={{ mb: 2 }}>
+            {error}
+          </Typography>
+        )}
+        {teacherClasses.length === 0 ? (
+          <Typography>No classes scheduled for today.</Typography>
+        ) : (
+          <Grid container spacing={3}>
+            {teacherClasses.map((cls, idx) => (
+              <Grid item xs={12} sm={6} md={4} key={idx}>
+                <Card
+                  sx={{
+                    cursor: "pointer",
+                    "&:hover": { boxShadow: 3 },
+                  }}
+                  onClick={() => handleClassSelect(cls)}
+                >
+                  <CardContent>
+                    <Typography variant="h6">{cls.className}</Typography>
+                    <Typography color="textSecondary" gutterBottom>
+                      {cls.subject}
+                    </Typography>
+                    <Typography variant="body2">
+                      Timing: {cls.timing}
+                    </Typography>
+                    <Typography variant="body2">
+                      Students: {cls.students.length}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </div>
     );
   }
@@ -144,7 +191,7 @@ function MarkAttendance() {
         Subject: {selectedClass.subject}
       </Typography>
       <Typography variant="subtitle1" gutterBottom>
-        Timing: {selectedClass.timing} {/* Display timing */}
+        Timing: {selectedClass.timing}
       </Typography>
 
       {/* Date Input */}
@@ -152,12 +199,9 @@ function MarkAttendance() {
         label="Select Date"
         type="date"
         value={selectedDate}
-        onChange={handleDateChange}
+        disabled
         InputLabelProps={{
           shrink: true,
-        }}
-        inputProps={{
-          min: new Date().toISOString().split("T")[0], // Disable past dates
         }}
         sx={{ mb: 3 }}
       />
@@ -168,34 +212,27 @@ function MarkAttendance() {
           <TableHead>
             <TableRow>
               <TableCell>Student Name</TableCell>
-              <TableCell>Roll Number</TableCell> {/* Added Roll Number Column */}
+              <TableCell>Roll Number</TableCell>
               <TableCell>SAP ID</TableCell>
               <TableCell>Present/Absent</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {selectedClass.students.map((student) => (
-              <TableRow key={student.id}>
-                {/* Student Name */}
+            {selectedClass.students.map((student, idx) => (
+              <TableRow key={idx}>
                 <TableCell>{student.name}</TableCell>
-
-                {/* Roll Number */}
                 <TableCell>{student.rollNo}</TableCell>
-
-                {/* SAP ID */}
                 <TableCell>{student.sapId}</TableCell>
-
-                {/* Present/Absent Toggle */}
                 <TableCell>
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={attendance[student.id] || false}
-                        onChange={handleAttendanceChange(student.id)}
+                        checked={attendance[student.sapId] || false}
+                        onChange={handleAttendanceChange(student.sapId)}
                         color="primary"
                       />
                     }
-                    label={attendance[student.id] ? "Present" : "Absent"}
+                    label={attendance[student.sapId] ? "Present" : "Absent"}
                   />
                 </TableCell>
               </TableRow>
@@ -213,6 +250,16 @@ function MarkAttendance() {
       >
         Save Attendance
       </Button>
+      {success && (
+        <Typography color="success.main" sx={{ mt: 2 }}>
+          {success}
+        </Typography>
+      )}
+      {error && (
+        <Typography color="error" sx={{ mt: 2 }}>
+          {error}
+        </Typography>
+      )}
     </div>
   );
 }
