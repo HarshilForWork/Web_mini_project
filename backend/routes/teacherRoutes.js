@@ -65,22 +65,50 @@ router.get("/today-classes/:sapId", async (req, res) => {
     }
   });
   
+// POST /api/teacher/mark-attendance
 router.post("/mark-attendance", async (req, res) => {
     try {
-      const { className, subjectName, date, students } = req.body;
+      const { className, subjectName, date, classEndTime, students } = req.body;
   
-      // Check if attendance already marked
+      // Check if attendance already marked for this class, subject, and date
       const existing = await Attendance.findOne({ className, subjectName, date });
+      
+      // Get current time to check if modification is allowed (within 12 hours of class end)
+      const currentTime = new Date();
+      const endTime = new Date(classEndTime);
+      const twelveHoursAfterClass = new Date(endTime.getTime() + (12 * 60 * 60 * 1000));
+      
       if (existing) {
-        return res.status(400).json({ message: "Attendance already marked for today." });
+        // Allow modification only within 12 hours after class end
+        if (currentTime > twelveHoursAfterClass) {
+          return res.status(403).json({ 
+            message: "Attendance can only be modified within 12 hours after class end" 
+          });
+        }
+        
+        // Update existing attendance
+        existing.students = students;
+        existing.lastModified = currentTime;
+        await existing.save();
+        return res.json({ message: "Attendance updated successfully!" });
       }
-  
-      await Attendance.create({ className, subjectName, date, students });
+      
+      // Create new attendance record
+      await Attendance.create({ 
+        className, 
+        subjectName, 
+        date, 
+        classEndTime,
+        students,
+        lastModified: currentTime
+      });
+      
       res.json({ message: "Attendance saved successfully!" });
     } catch (err) {
       console.error(err);
       res.status(500).json({ message: "Server error" });
     }
   });
+  
   
 module.exports = router;
