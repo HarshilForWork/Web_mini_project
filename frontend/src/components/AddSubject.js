@@ -103,7 +103,7 @@ function AddSubject() {
     }
   };
 
-  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat","Sun"];
 
   return (
     <Box sx={{ px: 3, py: 2 }}>

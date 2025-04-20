@@ -1,9 +1,10 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
-const cors = require("cors"); // <-- Don't forget to require cors!
+const cors = require("cors"); 
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes.js");
+const teacherRoutes = require("./routes/teacherRoutes");
 
 dotenv.config();
 const app = express();
@@ -34,6 +35,7 @@ mongoose
 // Routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/teacher", teacherRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
