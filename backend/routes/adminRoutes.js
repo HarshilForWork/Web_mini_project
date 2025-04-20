@@ -7,18 +7,48 @@ const Subject = require("../models/Subject");
 const bcrypt = require("bcryptjs");
 const parseTime = require("../utils/parseTime");
 
-// ===================== Add Student =========================
+// ===================== GET ALL CLASSES =========================
+router.get("/classes", async (req, res) => {
+  try {
+    const classes = await Class.find({}, "className year batch");
+    res.json(classes);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch classes" });
+  }
+});
+
+// ===================== ADD CLASS =========================
+router.post("/add-class", async (req, res) => {
+  try {
+    const { year, className, batch, numStudents } = req.body;
+    const newClass = await Class.create({
+      year: parseInt(year),
+      className,
+      batch,
+      numStudents: parseInt(numStudents),
+    });
+    res.status(201).json(newClass);
+  } catch (err) {
+    if (err.code === 11000) {
+      res.status(400).json({ message: "Class already exists" });
+    } else {
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+});
+
+// ===================== ADD STUDENT =========================
 router.post("/add-student", async (req, res) => {
   try {
     const { name, sapId, division, rollNo } = req.body;
 
-    // Check if the class/division exists
+    // Check if class/division exists
     const classExists = await Class.findOne({ className: division });
     if (!classExists) {
-      return res.status(400).json({ message: `Class/Division "${division}" does not exist.` });
+      return res.status(400).json({ message: `Class "${division}" not found` });
     }
 
-    // Hash password (SAP ID as default password)
+    // Hash password (SAP ID as default)
     const hashedPassword = await bcrypt.hash(sapId, 10);
 
     const student = await Student.create({
@@ -40,51 +70,40 @@ router.post("/add-student", async (req, res) => {
   }
 });
 
-// ===================== Add Teacher =========================
+// ===================== ADD TEACHER =========================
 router.post("/add-teacher", async (req, res) => {
   try {
     const { name, sapId, classesTaught, subjects } = req.body;
 
-    // 1. Validate classesTaught (divisions) exist
+    // Validate classes exist
     const classDocs = await Class.find({ className: { $in: classesTaught } });
-    const foundClassNames = classDocs.map(cls => cls.className);
-    const invalidClasses = classesTaught.filter(
-      cls => !foundClassNames.includes(cls)
-    );
-    if (invalidClasses.length > 0) {
-      return res.status(400).json({
-        message: `Invalid class/division(s): ${invalidClasses.join(", ")}`
-      });
+    if (classDocs.length !== classesTaught.length) {
+      const foundClasses = classDocs.map(c => c.className);
+      const invalid = classesTaught.filter(c => !foundClasses.includes(c));
+      return res.status(400).json({ message: `Invalid classes: ${invalid.join(", ")}` });
     }
 
-    // 2. Validate subjects exist
+    // Validate subjects exist
     const subjectDocs = await Subject.find({ subjectName: { $in: subjects } });
-    const foundSubjectNames = subjectDocs.map(subject => subject.subjectName);
-    const invalidSubjects = subjects.filter(
-      subject => !foundSubjectNames.includes(subject)
-    );
-    if (invalidSubjects.length > 0) {
-      return res.status(400).json({
-        message: `Invalid subject(s): ${invalidSubjects.join(", ")}`
-      });
+    if (subjectDocs.length !== subjects.length) {
+      const foundSubjects = subjectDocs.map(s => s.subjectName);
+      const invalid = subjects.filter(s => !foundSubjects.includes(s));
+      return res.status(400).json({ message: `Invalid subjects: ${invalid.join(", ")}` });
     }
 
-    // 3. Hash password (SAP ID as default)
+    // Hash password
     const hashedPassword = await bcrypt.hash(sapId, 10);
 
-    // 4. Create teacher
     const teacher = await Teacher.create({
       name,
       sapId,
       password: hashedPassword,
-      classesTaught, // array of division/class names
-      subjects       // array of subject names
+      classesTaught,
+      subjects
     });
 
-    // 5. Remove password from response
     const { password, ...teacherData } = teacher.toObject();
     res.status(201).json(teacherData);
-
   } catch (err) {
     if (err.code === 11000) {
       res.status(400).json({ message: "SAP ID already exists" });
@@ -93,95 +112,48 @@ router.post("/add-teacher", async (req, res) => {
     }
   }
 });
-  
-// ===================== Add Class =========================
-router.post("/add-class", async (req, res) => {
-  try {
-    const { year, className, batch, numStudents } = req.body;
-    const newClass = await Class.create({
-      year: parseInt(year),
-      className,
-      batch,
-      numStudents: parseInt(numStudents),
-    });
-    res.status(201).json(newClass);
-  } catch (err) {
-    if (err.code === 11000) {
-      res.status(400).json({ message: "Class already exists" });
-    } else {
-      res.status(500).json({ message: "Server error" });
-    }
-  }
-});
 
-// ===================== Add Subject (with timing clash check) =========================
+// ===================== ADD SUBJECT =========================
 router.post("/add-subject", async (req, res) => {
   try {
     const { subjectName, classesTaught, timings } = req.body;
 
-    // Find class documents by className
+    // Validate classes exist
     const classDocs = await Class.find({ className: { $in: classesTaught } });
     if (classDocs.length !== classesTaught.length) {
-      return res.status(400).json({ message: "One or more class names are invalid" });
+      return res.status(400).json({ message: "Invalid class names" });
     }
-    const classIds = classDocs.map(cls => cls._id);
+    const classIds = classDocs.map(c => c._id);
 
-    // Check for internal overlaps in new timings
-    for (let i = 0; i < timings.length; i++) {
-      const timingA = timings[i];
-      const daysA = timingA.days;
-      const startA = parseTime(timingA.time.start);
-      const endA = parseTime(timingA.time.end);
-
-      for (let j = i + 1; j < timings.length; j++) {
-        const timingB = timings[j];
-        const daysB = timingB.days;
-        const startB = parseTime(timingB.time.start);
-        const endB = parseTime(timingB.time.end);
-
-        const commonDays = daysA.filter(day => daysB.includes(day));
-        if (commonDays.length === 0) continue;
-
-        // Check time overlap
-        if (startA < endB && startB < endA) {
-          return res.status(400).json({
-            message: `Timing overlap in new subject for ${commonDays.join(", ")}`
-          });
-        }
-      }
-    }
-
-    // Check overlaps with existing subjects for each class
+    // Check timing conflicts
     for (const classId of classIds) {
       const subjectsInClass = await Subject.find({ classesTaught: classId });
-
-      for (const timing of timings) {
-        const newDays = timing.days;
-        const newStart = parseTime(timing.time.start);
-        const newEnd = parseTime(timing.time.end);
-
-        for (const subject of subjectsInClass) {
-          for (const existingTiming of subject.timings) {
-            const existingDays = existingTiming.days;
-            const existingStart = parseTime(existingTiming.time.start);
-            const existingEnd = parseTime(existingTiming.time.end);
-
-            const commonDays = newDays.filter(day => existingDays.includes(day));
-            if (commonDays.length === 0) continue;
-
-            // Check time overlap
-            if (newStart < existingEnd && existingStart < newEnd) {
-              const className = classDocs.find(c => c._id.equals(classId)).className;
-              return res.status(400).json({
-                message: `Conflict in ${className}: Timing overlaps on ${commonDays.join(", ")}`
-              });
+      
+      for (const subject of subjectsInClass) {
+        for (const existingTiming of subject.timings) {
+          for (const newTiming of timings) {
+            const commonDays = existingTiming.days.filter(day => 
+              newTiming.days.includes(day)
+            );
+            
+            if (commonDays.length > 0) {
+              const existingStart = parseTime(existingTiming.time.start);
+              const existingEnd = parseTime(existingTiming.time.end);
+              const newStart = parseTime(newTiming.time.start);
+              const newEnd = parseTime(newTiming.time.end);
+              
+              if (newStart < existingEnd && newEnd > existingStart) {
+                const className = classDocs.find(c => c._id.equals(classId)).className;
+                return res.status(400).json({
+                  message: `Conflict in ${className}: Timing overlaps on ${commonDays.join(", ")}`
+                });
+              }
             }
           }
         }
       }
     }
 
-    // Save if no overlaps
     const newSubject = await Subject.create({
       subjectName,
       classesTaught: classIds,
@@ -192,7 +164,6 @@ router.post("/add-subject", async (req, res) => {
     });
 
     res.status(201).json(newSubject);
-
   } catch (err) {
     if (err.code === 11000) {
       res.status(400).json({ message: "Subject already exists" });

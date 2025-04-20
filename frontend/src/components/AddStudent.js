@@ -1,21 +1,44 @@
-import React, { useState } from "react";
-import { TextField, Button, Typography, Box, Paper, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
+import React, { useState, useEffect } from "react";
+import { 
+  TextField, Button, Typography, Box, Paper, 
+  FormControl, InputLabel, Select, MenuItem, CircularProgress 
+} from "@mui/material";
 
 function AddStudent() {
   const [studentData, setStudentData] = useState({
     name: "",
     rollNo: "",
     sapId: "",
-    classId: "" // Added classId field to track selected class
+    classId: ""
   });
+  const [availableClasses, setAvailableClasses] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  // Mock data for available classes (ensure this is defined)
-  const [availableClasses] = useState([
-    { id: 1, name: "Computer Science A", year: "Second Year", batch: "A" },
-    { id: 2, name: "Mechanical Engineering B", year: "Third Year", batch: "B" },
-    { id: 3, name: "Electrical Engineering C", year: "First Year", batch: "C" }
-  ]);
+  // Fetch classes from backend on component mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch("http://localhost:5000/api/admin/classes", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) throw new Error("Failed to fetch classes");
+        const data = await response.json();
+        setAvailableClasses(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClasses();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,31 +48,53 @@ function AddStudent() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setSubmitted(false);
 
-    // Validate input
     if (!studentData.name || !studentData.rollNo || !studentData.sapId || !studentData.classId) {
-      alert("All fields are required!");
+      setError("All fields are required!");
       return;
     }
 
-    // Here you would normally send data to backend API
-    console.log("Student data submitted:", studentData);
+    // Find the selected class
+    const selectedClass = availableClasses.find(cls => cls._id === studentData.classId);
+    if (!selectedClass) {
+      setError("Selected class not found!");
+      return;
+    }
 
-    // Show success message
-    setSubmitted(true);
+    // Prepare payload
+    const payload = {
+      name: studentData.name,
+      sapId: studentData.sapId,
+      rollNo: studentData.rollNo,
+      division: selectedClass.className // Use the correct field name from your Class model
+    };
 
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setStudentData({
-        name: "",
-        rollNo: "",
-        sapId: "",
-        classId: ""
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("http://localhost:5000/api/admin/add-student", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
       });
-      setSubmitted(false);
-    }, 3000);
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSubmitted(true);
+        setStudentData({ name: "", rollNo: "", sapId: "", classId: "" });
+      } else {
+        setError(data.message || "Failed to add student.");
+      }
+    } catch (err) {
+      setError("Failed to connect to server.");
+    }
   };
 
   return (
@@ -58,70 +103,71 @@ function AddStudent() {
         Add New Student
       </Typography>
 
-      {submitted ? (
+      {submitted && (
         <Paper elevation={3} sx={{ p: 3, bgcolor: "#e8f5e9", mb: 3 }}>
-          <Typography variant="body1">
-            Student "{studentData.name}" successfully added to class!
-          </Typography>
+          <Typography variant="body1">Student added successfully!</Typography>
         </Paper>
-      ) : null}
+      )}
 
-      <form onSubmit={handleSubmit}>
-        {/* Full Name */}
-        <TextField
-          fullWidth
-          label="Full Name"
-          name="name"
-          value={studentData.name}
-          onChange={handleChange}
-          margin="normal"
-          required
-        />
+      {error && (
+        <Paper elevation={3} sx={{ p: 3, bgcolor: "#ffebee", mb: 3 }}>
+          <Typography color="error">{error}</Typography>
+        </Paper>
+      )}
 
-        {/* Roll Number */}
-        <TextField
-          fullWidth
-          label="Roll Number"
-          name="rollNo"
-          value={studentData.rollNo}
-          onChange={handleChange}
-          margin="normal"
-          required
-        />
-
-        {/* SAP ID */}
-        <TextField
-          fullWidth
-          label="SAP ID"
-          name="sapId"
-          value={studentData.sapId}
-          onChange={handleChange}
-          margin="normal"
-          required
-        />
-
-        {/* Class Dropdown */}
-        <FormControl fullWidth margin="normal" required>
-          <InputLabel>Select Class</InputLabel>
-          <Select
-            name="classId"
-            value={studentData.classId}
+      {loading ? (
+        <Box sx={{ display: "flex", justifyContent: "center", my: 3 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label="Full Name"
+            name="name"
+            value={studentData.name}
             onChange={handleChange}
-            label="Select Class"
-          >
-            {availableClasses.map((cls) => (
-              <MenuItem key={cls.id} value={cls.id}>
-                {cls.name} ({cls.year}, Batch {cls.batch})
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {/* Submit Button */}
-        <Button type="submit" variant="contained" color="primary" sx={{ mt: 3 }}>
-          Add Student
-        </Button>
-      </form>
+            margin="normal"
+            required
+          />
+          <TextField
+            fullWidth
+            label="Roll Number"
+            name="rollNo"
+            value={studentData.rollNo}
+            onChange={handleChange}
+            margin="normal"
+            required
+          />
+          <TextField
+            fullWidth
+            label="SAP ID"
+            name="sapId"
+            value={studentData.sapId}
+            onChange={handleChange}
+            margin="normal"
+            required
+          />
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel>Select Class</InputLabel>
+            <Select
+              name="classId"
+              value={studentData.classId}
+              onChange={handleChange}
+              label="Select Class"
+            >
+              {availableClasses.map((cls) => (
+                <MenuItem key={cls._id} value={cls._id}>
+                  {cls.className} ({cls.year}, Batch {cls.batch})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button type="submit" variant="contained" color="primary" sx={{ mt: 3 }}>
+            Add Student
+          </Button>
+        </form>
+      )}
     </Box>
   );
 }
