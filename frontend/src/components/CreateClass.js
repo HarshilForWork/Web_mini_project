@@ -9,8 +9,15 @@ function CreateClass() {
     numberOfStudents: ""
   });
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
-  const yearOptions = ["First Year", "Second Year", "Third Year", "Fourth Year"];
+  // Year options as numbers:
+  const yearOptions = [
+    { value: 1, label: "1" },
+    { value: 2, label: "2" },
+    { value: 3, label: "3" },
+    { value: 4, label: "4" }
+  ];
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -20,44 +27,64 @@ function CreateClass() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate input
+
+    setError("");
+    setSubmitted(false);
+
     if (!classData.year || !classData.name || !classData.batch || !classData.numberOfStudents) {
-      alert("All fields are required!");
+      setError("All fields are required!");
       return;
     }
-    
-    // Here you would normally send data to backend API
-    console.log("Class data submitted:", classData);
-    
-    // Show success message
-    setSubmitted(true);
-    
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setClassData({
-        year: "",
-        name: "",
-        batch: "",
-        numberOfStudents: ""
+
+    try {
+      const response = await fetch("http://localhost:5000/api/admin/add-class", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: Number(classData.year),
+          className: classData.name,
+          batch: classData.batch,
+          numStudents: Number(classData.numberOfStudents)
+        })
       });
-      setSubmitted(false);
-    }, 3000);
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSubmitted(true);
+        setClassData({
+          year: "",
+          name: "",
+          batch: "",
+          numberOfStudents: ""
+        });
+      } else {
+        setError(data.message || "Failed to create class.");
+      }
+    } catch (err) {
+      setError("Failed to connect to server.");
+    }
   };
 
   return (
     <Box sx={{ px: 3, py: 2 }}>
       <Typography variant="h5" sx={{ mb: 3 }}>Create New Class</Typography>
       
-      {submitted ? (
+      {submitted && (
         <Paper elevation={3} sx={{ p: 3, bgcolor: '#e8f5e9', mb: 3 }}>
           <Typography variant="body1">
             Class {classData.name} ({classData.batch}) successfully created!
           </Typography>
         </Paper>
-      ) : null}
+      )}
+
+      {error && (
+        <Paper elevation={3} sx={{ p: 3, bgcolor: '#ffebee', mb: 3 }}>
+          <Typography color="error">{error}</Typography>
+        </Paper>
+      )}
       
       <form onSubmit={handleSubmit}>
         <TextField
@@ -71,8 +98,8 @@ function CreateClass() {
           required
         >
           {yearOptions.map((option) => (
-            <MenuItem key={option} value={option}>
-              {option}
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
             </MenuItem>
           ))}
         </TextField>
