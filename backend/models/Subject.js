@@ -11,12 +11,8 @@ const timingSchema = new mongoose.Schema({
 const subjectSchema = new mongoose.Schema(
   {
     subjectName: { type: String, required: true, unique: true }, // e.g., "Data Structures"
-    classesTaught: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Class",
-      required: true
-    }],
-    timings: [timingSchema] // Order matters (index 0 = first class timing)
+    classesTaught: [String], // Store class names like "SE-IT-A"
+    timings: [timingSchema]
   },
   { collection: "Subject_data" }
 );

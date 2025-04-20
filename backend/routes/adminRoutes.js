@@ -118,16 +118,15 @@ router.post("/add-subject", async (req, res) => {
   try {
     const { subjectName, classesTaught, timings } = req.body;
 
-    // Validate classes exist
+    // Validate classes exist by name
     const classDocs = await Class.find({ className: { $in: classesTaught } });
     if (classDocs.length !== classesTaught.length) {
       return res.status(400).json({ message: "Invalid class names" });
     }
-    const classIds = classDocs.map(c => c._id);
 
-    // Check timing conflicts
-    for (const classId of classIds) {
-      const subjectsInClass = await Subject.find({ classesTaught: classId });
+    // Check timing conflicts for each class name
+    for (const className of classesTaught) {
+      const subjectsInClass = await Subject.find({ classesTaught: className });
       
       for (const subject of subjectsInClass) {
         for (const existingTiming of subject.timings) {
@@ -143,7 +142,6 @@ router.post("/add-subject", async (req, res) => {
               const newEnd = parseTime(newTiming.time.end);
               
               if (newStart < existingEnd && newEnd > existingStart) {
-                const className = classDocs.find(c => c._id.equals(classId)).className;
                 return res.status(400).json({
                   message: `Conflict in ${className}: Timing overlaps on ${commonDays.join(", ")}`
                 });
@@ -154,9 +152,10 @@ router.post("/add-subject", async (req, res) => {
       }
     }
 
+    // Save subject with class names (not IDs)
     const newSubject = await Subject.create({
       subjectName,
-      classesTaught: classIds,
+      classesTaught, // Directly use provided class names
       timings: timings.map(t => ({
         days: t.days,
         time: { start: t.time.start, end: t.time.end }
