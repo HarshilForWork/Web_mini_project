@@ -17,6 +17,18 @@ router.get("/classes", async (req, res) => {
   }
 });
 
+// ===================== GET ALL Subjects =========================
+// In adminRoutes.js
+router.get("/subjects", async (req, res) => {
+  try {
+    const subjects = await Subject.find({}, "subjectName");
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch subjects" });
+  }
+});
+
+
 // ===================== ADD CLASS =========================
 router.post("/add-class", async (req, res) => {
   try {

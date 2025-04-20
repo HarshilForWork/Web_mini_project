@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { 
-  TextField, Button, Typography, Box, Paper, 
+import {
+  TextField, Button, Typography, Box, Paper,
   FormControl, InputLabel, Select, MenuItem, Chip, OutlinedInput
 } from "@mui/material";
 
@@ -9,23 +9,33 @@ function AddTeacher() {
     name: "",
     sapId: "",
     subjects: [],
-    classes: []
+    classesTaught: []
   });
-  
-  // Mock data for available subjects and classes (in a real app, this would come from API)
-  const [availableSubjects, setAvailableSubjects] = useState([
-    { id: 1, name: "Mathematics" },
-    { id: 2, name: "Physics" },
-    { id: 3, name: "Computer Science" }
-  ]);
-  
-  const [availableClasses, setAvailableClasses] = useState([
-    { id: 1, name: "Computer Science A", year: "Second Year", batch: "A" },
-    { id: 2, name: "Mechanical Engineering B", year: "Third Year", batch: "B" },
-    { id: 3, name: "Electrical Engineering C", year: "First Year", batch: "C" }
-  ]);
-  
+
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [availableClasses, setAvailableClasses] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
+  // Fetch subjects and classes from backend
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch classes
+        const classRes = await fetch("http://localhost:5000/api/admin/classes");
+        const classData = await classRes.json();
+        setAvailableClasses(classData);
+
+        // Fetch subjects
+        const subjectRes = await fetch("http://localhost:5000/api/admin/subjects");
+        const subjectData = await subjectRes.json();
+        setAvailableSubjects(subjectData);
+      } catch {
+        setError("Failed to load subjects or classes.");
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,45 +45,65 @@ function AddTeacher() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate input
-    if (!teacherData.name || !teacherData.sapId || teacherData.subjects.length === 0 || teacherData.classes.length === 0) {
-      alert("All fields are required, including at least one subject and one class!");
+
+    setError("");
+    setSubmitted(false);
+
+    if (!teacherData.name || !teacherData.sapId || teacherData.subjects.length === 0 || teacherData.classesTaught.length === 0) {
+      setError("All fields are required, including at least one subject and one class!");
       return;
     }
-    
-    // Here you would normally send data to backend API
-    console.log("Teacher data submitted:", teacherData);
-    
-    // Show success message
-    setSubmitted(true);
-    
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setTeacherData({
-        name: "",
-        sapId: "",
-        subjects: [],
-        classes: []
+
+    try {
+      const response = await fetch("http://localhost:5000/api/admin/add-teacher", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: teacherData.name,
+          sapId: teacherData.sapId,
+          subjects: teacherData.subjects,         // Array of subject names
+          classesTaught: teacherData.classesTaught // Array of class names
+        })
       });
-      setSubmitted(false);
-    }, 3000);
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSubmitted(true);
+        setTeacherData({
+          name: "",
+          sapId: "",
+          subjects: [],
+          classesTaught: []
+        });
+      } else {
+        setError(data.message || "Failed to add teacher.");
+      }
+    } catch (err) {
+      setError("Failed to connect to server.");
+    }
   };
 
   return (
     <Box sx={{ px: 3, py: 2 }}>
       <Typography variant="h5" sx={{ mb: 3 }}>Add New Teacher</Typography>
-      
-      {submitted ? (
+
+      {submitted && (
         <Paper elevation={3} sx={{ p: 3, bgcolor: '#e8f5e9', mb: 3 }}>
           <Typography variant="body1">
             Teacher "{teacherData.name}" successfully added!
           </Typography>
         </Paper>
-      ) : null}
-      
+      )}
+
+      {error && (
+        <Paper elevation={3} sx={{ p: 3, bgcolor: '#ffebee', mb: 3 }}>
+          <Typography color="error">{error}</Typography>
+        </Paper>
+      )}
+
       <form onSubmit={handleSubmit}>
         <TextField
           fullWidth
@@ -84,7 +114,7 @@ function AddTeacher() {
           margin="normal"
           required
         />
-        
+
         <TextField
           fullWidth
           label="SAP ID"
@@ -94,7 +124,7 @@ function AddTeacher() {
           margin="normal"
           required
         />
-        
+
         <FormControl fullWidth margin="normal" required>
           <InputLabel id="subjects-label">Subjects</InputLabel>
           <Select
@@ -106,52 +136,46 @@ function AddTeacher() {
             input={<OutlinedInput label="Subjects" />}
             renderValue={(selected) => (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {selected.map((value) => {
-                  const subject = availableSubjects.find(s => s.id === value);
-                  return (
-                    <Chip key={value} label={subject.name} />
-                  );
-                })}
+                {selected.map((value) => (
+                  <Chip key={value} label={value} />
+                ))}
               </Box>
             )}
           >
             {availableSubjects.map((subject) => (
-              <MenuItem key={subject.id} value={subject.id}>
-                {subject.name}
+              <MenuItem key={subject.subjectName} value={subject.subjectName}>
+                {subject.subjectName}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
-        
+
         <FormControl fullWidth margin="normal" required>
           <InputLabel id="classes-label">Classes</InputLabel>
           <Select
             labelId="classes-label"
             multiple
-            name="classes"
-            value={teacherData.classes}
+            name="classesTaught"
+            value={teacherData.classesTaught}
             onChange={handleChange}
             input={<OutlinedInput label="Classes" />}
             renderValue={(selected) => (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {selected.map((value) => {
-                  const classObj = availableClasses.find(c => c.id === value);
-                  return (
-                    <Chip key={value} label={`${classObj.name} (${classObj.year})`} />
-                  );
-                })}
+                {selected.map((value) => (
+                  <Chip key={value} label={value} />
+                ))}
               </Box>
             )}
           >
             {availableClasses.map((cls) => (
-              <MenuItem key={cls.id} value={cls.id}>
-                {cls.name} ({cls.year}, Batch {cls.batch})
+              <MenuItem key={cls.className} value={cls.className}>
+                {cls.className} ({cls.batch})
               </MenuItem>
             ))}
           </Select>
         </FormControl>
-        
-        <Button 
+
+        <Button
           type="submit"
           variant="contained"
           color="primary"
