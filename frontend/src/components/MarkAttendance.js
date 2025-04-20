@@ -130,7 +130,8 @@ function MarkAttendance() {
           subjectName: selectedClass.subject,
           date: selectedDate,
           classEndTime: classEndTime.toISOString(),
-          students: studentsData
+          students: studentsData,
+          sapId: user.sapId // <-- THIS FIXES THE UNAUTHORIZED ERROR
         })
       });
 

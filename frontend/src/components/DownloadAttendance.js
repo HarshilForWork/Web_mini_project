@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -8,111 +8,156 @@ import {
   MenuItem,
   TextField,
   Button,
+  CircularProgress
 } from "@mui/material";
-import { saveAs } from "file-saver"; // For downloading files
-
-// Mock data (replace with API calls)
-const teacherClasses = [
-  {
-    id: 1,
-    className: "Computer Science A",
-    subject: "Data Structures",
-    students: [
-      { id: 1, name: "John Doe", sapId: "SAP001", rollNo: "CS101" },
-      { id: 2, name: "Jane Smith", sapId: "SAP002", rollNo: "CS102" },
-    ],
-  },
-];
+import { saveAs } from "file-saver";
 
 function DownloadAttendance() {
+  const [teacherClasses, setTeacherClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedStudent, setSelectedStudent] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  // Fetch ALL classes the teacher teaches (not just today's)
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/teacher/all-classes/${user.sapId}`
+        );
+        if (!res.ok) throw new Error("Failed to fetch classes");
+        const data = await res.json();
+        setTeacherClasses(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (user.sapId) fetchClasses();
+  }, [user.sapId]);
 
   const handleClassChange = (e) => {
     setSelectedClass(e.target.value);
-    setSelectedSubject(""); // Reset subject when class changes
-    setSelectedStudent(""); // Reset student when class changes
+    const selected = teacherClasses.find((c) => c.className === e.target.value);
+    setSelectedSubject(selected?.subject || "");
+    setSelectedStudent("");
   };
 
   const handleSubjectChange = (e) => {
     setSelectedSubject(e.target.value);
-    setSelectedStudent(""); // Reset student when subject changes
+    setSelectedStudent("");
   };
 
   const handleStudentChange = (e) => {
     setSelectedStudent(e.target.value);
   };
 
-  const handleDownloadClassAttendance = () => {
+  const handleDownloadClassAttendance = async () => {
     if (!selectedClass || !selectedSubject || !startDate || !endDate) {
       alert("Please select all fields and specify the date range!");
       return;
     }
-
-    // Mock attendance data (replace with API call)
-    const attendanceData = [
-      { date: "2023-09-01", studentName: "John Doe", status: "Present" },
-      { date: "2023-09-02", studentName: "Jane Smith", status: "Absent" },
-      { date: "2023-09-03", studentName: "John Doe", status: "Present" },
-    ];
-
-    // Filter attendance data based on date range
-    const filteredData = attendanceData.filter(
-      (record) => record.date >= startDate && record.date <= endDate
-    );
-
-    // Generate CSV content
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      ["Date,Student Name,Status"]
-        .concat(
-          filteredData.map(
-            (record) => `${record.date},${record.studentName},${record.status}`
-          )
-        )
-        .join("\n");
-
-    // Download CSV file
-    const blob = new Blob([decodeURIComponent(encodeURI(csvContent))], {
-      type: "text/csv;charset=utf-8;",
-    });
-    saveAs(blob, `${selectedClass}_${selectedSubject}_attendance.csv`);
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/teacher/attendance/class?className=${encodeURIComponent(
+          selectedClass
+        )}&subjectName=${encodeURIComponent(
+          selectedSubject
+        )}&startDate=${startDate}&endDate=${endDate}&sapId=${user.sapId}`
+      );
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to download attendance");
+      }
+      const data = await res.json();
+      if (data.length === 0) {
+        alert("No attendance records found for the selected date range");
+        return;
+      }
+      const csvContent = [
+        "Date,SAP ID,Status",
+        ...data.map((record) => `${record.date},${record.sapId},${record.status}`),
+      ].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      saveAs(blob, `${selectedClass}_${selectedSubject}_attendance.csv`);
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
-  const handleDownloadStudentAttendance = () => {
-    if (!selectedClass || !selectedSubject || !selectedStudent || !startDate || !endDate) {
+  const handleDownloadStudentAttendance = async () => {
+    if (
+      !selectedClass ||
+      !selectedSubject ||
+      !selectedStudent ||
+      !startDate ||
+      !endDate
+    ) {
       alert("Please select all fields and specify the date range!");
       return;
     }
-
-    // Mock attendance data (replace with API call)
-    const attendanceData = [
-      { date: "2023-09-01", status: "Present" },
-      { date: "2023-09-02", status: "Absent" },
-      { date: "2023-09-03", status: "Present" },
-    ];
-
-    // Filter attendance data based on date range
-    const filteredData = attendanceData.filter(
-      (record) => record.date >= startDate && record.date <= endDate
-    );
-
-    // Generate CSV content
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      ["Date,Status"]
-        .concat(filteredData.map((record) => `${record.date},${record.status}`))
-        .join("\n");
-
-    // Download CSV file
-    const blob = new Blob([decodeURIComponent(encodeURI(csvContent))], {
-      type: "text/csv;charset=utf-8;",
-    });
-    saveAs(blob, `${selectedClass}_${selectedSubject}_${selectedStudent}_attendance.csv`);
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/teacher/attendance/student?className=${encodeURIComponent(
+          selectedClass
+        )}&subjectName=${encodeURIComponent(
+          selectedSubject
+        )}&studentSapId=${encodeURIComponent(
+          selectedStudent
+        )}&startDate=${startDate}&endDate=${endDate}&sapId=${user.sapId}`
+      );
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to download attendance");
+      }
+      const data = await res.json();
+      if (data.length === 0) {
+        alert("No attendance records found for the selected student and date range");
+        return;
+      }
+      const csvContent = [
+        "Date,Status",
+        ...data.map((record) => `${record.date},${record.status}`),
+      ].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      saveAs(
+        blob,
+        `${selectedClass}_${selectedSubject}_${selectedStudent}_attendance.csv`
+      );
+    } catch (err) {
+      alert(err.message);
+    }
   };
+
+  if (loading) {
+    return <CircularProgress sx={{ display: "block", margin: "20px auto" }} />;
+  }
+
+  if (error) {
+    return (
+      <Typography color="error" sx={{ textAlign: "center", mt: 3 }}>
+        {error}
+      </Typography>
+    );
+  }
+
+  // Extract unique subjects for the selected class
+  const availableSubjects = [
+    ...new Set(teacherClasses
+      .filter((c) => c.className === selectedClass)
+      .map((c) => c.subject)),
+  ];
+
+  // Get students for the selected class
+  const availableStudents =
+    teacherClasses.find((c) => c.className === selectedClass)?.students || [];
 
   return (
     <Box sx={{ padding: 3 }}>
@@ -124,8 +169,8 @@ function DownloadAttendance() {
       <FormControl fullWidth margin="normal">
         <InputLabel>Select Class</InputLabel>
         <Select value={selectedClass} onChange={handleClassChange}>
-          {teacherClasses.map((cls) => (
-            <MenuItem key={cls.id} value={cls.className}>
+          {teacherClasses.map((cls, idx) => (
+            <MenuItem key={idx} value={cls.className}>
               {cls.className}
             </MenuItem>
           ))}
@@ -136,12 +181,11 @@ function DownloadAttendance() {
       <FormControl fullWidth margin="normal" disabled={!selectedClass}>
         <InputLabel>Select Subject</InputLabel>
         <Select value={selectedSubject} onChange={handleSubjectChange}>
-          {teacherClasses
-            .find((cls) => cls.className === selectedClass)?.subject && (
-            <MenuItem value={teacherClasses.find((cls) => cls.className === selectedClass)?.subject}>
-              {teacherClasses.find((cls) => cls.className === selectedClass)?.subject}
+          {availableSubjects.map((subject, idx) => (
+            <MenuItem key={idx} value={subject}>
+              {subject}
             </MenuItem>
-          )}
+          ))}
         </Select>
       </FormControl>
 
@@ -149,13 +193,11 @@ function DownloadAttendance() {
       <FormControl fullWidth margin="normal" disabled={!selectedSubject}>
         <InputLabel>Select Student</InputLabel>
         <Select value={selectedStudent} onChange={handleStudentChange}>
-          {teacherClasses
-            .find((cls) => cls.className === selectedClass)
-            ?.students.map((student) => (
-              <MenuItem key={student.id} value={student.name}>
-                {student.name}
-              </MenuItem>
-            ))}
+          {availableStudents.map((student) => (
+            <MenuItem key={student.sapId} value={student.sapId}>
+              {student.name} ({student.sapId})
+            </MenuItem>
+          ))}
         </Select>
       </FormControl>
 
@@ -183,7 +225,7 @@ function DownloadAttendance() {
         />
       </Box>
 
-      {/* Buttons Positioned Opposite */}
+      {/* Buttons */}
       <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3 }}>
         <Button
           variant="contained"
@@ -198,7 +240,13 @@ function DownloadAttendance() {
           variant="contained"
           color="secondary"
           onClick={handleDownloadStudentAttendance}
-          disabled={!selectedClass || !selectedSubject || !selectedStudent || !startDate || !endDate}
+          disabled={
+            !selectedClass ||
+            !selectedSubject ||
+            !selectedStudent ||
+            !startDate ||
+            !endDate
+          }
         >
           DOWNLOAD STUDENT ATTENDANCE
         </Button>
