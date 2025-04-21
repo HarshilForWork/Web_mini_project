@@ -2,10 +2,8 @@ import React, { useRef } from "react";
 import { Box, Button, Typography, Grid, Container } from "@mui/material";
 
 function LandingPage() {
-  // Create a reference for the "About the App" section
   const aboutSectionRef = useRef(null);
 
-  // Scroll to the "About the App" section when Get Started is clicked
   const handleScrollToAbout = () => {
     aboutSectionRef.current.scrollIntoView({ behavior: "smooth" });
   };
@@ -16,9 +14,7 @@ function LandingPage() {
       <Box
         sx={{
           minHeight: "100vh",
-          backgroundImage: "url('https://source.unsplash.com/1600x900/?school,education')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
+          backgroundColor: "#000", // Solid black background
           color: "#fff",
           display: "flex",
           alignItems: "center",
@@ -56,18 +52,8 @@ function LandingPage() {
               </Box>
             </Grid>
 
-            {/* Right Section */}
-            <Grid item xs={12} md={6}>
-              <img
-                src="https://source.unsplash.com/600x400/?classroom,students"
-                alt="Attendance Portal"
-                style={{
-                  width: "100%",
-                  borderRadius: "8px",
-                  boxShadow: "0px 4px 10px rgba(0, 0, 0, 0.3)",
-                }}
-              />
-            </Grid>
+            {/* Right Section - intentionally left blank */}
+            <Grid item xs={12} md={6}></Grid>
           </Grid>
         </Container>
       </Box>

@@ -13,11 +13,11 @@ function Sidebar({ role, setActiveComponent }) {
     teacher: [
       { label: "Mark Attendance", componentName: "markAttendance" },
       { label: "Download Attendance", componentName: "downloadAttendance" },
-      { label: "View Tickets", componentName: "viewTickets" },
+      
     ],
     student: [
       { label: "View Attendance", componentName: "viewAttendance" },
-      { label: "Raise Ticket", componentName: "raiseTicket" },
+      
       { label: "Download Attendance", componentName: "downloadAttendance" },
     ],
   };
