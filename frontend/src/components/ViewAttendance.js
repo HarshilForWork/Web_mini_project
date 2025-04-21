@@ -1,67 +1,136 @@
 import React, { useState } from "react";
-import { Box, Typography, Grid, Card, CardContent, TextField } from "@mui/material";
-
-// Mock function to fetch attendance for a particular day (replace with API call)
-const fetchAttendanceByDate = (date) => {
-  // Example: On 2025-04-12, present in Data Structures and Physics, absent in Linear Algebra
-  if (date === "2025-04-12") {
-    return [
-      { subject: "Data Structures", status: "Present" },
-      { subject: "Linear Algebra", status: "Absent" },
-      { subject: "Physics", status: "Present" },
-    ];
-  }
-  // Example: On 2025-04-13, absent in all
-  if (date === "2025-04-13") {
-    return [
-      { subject: "Data Structures", status: "Absent" },
-      { subject: "Linear Algebra", status: "Absent" },
-      { subject: "Physics", status: "Absent" },
-    ];
-  }
-  // Default: No records
-  return [];
-};
+import { 
+  Box, 
+  Typography, 
+  Grid, 
+  Card, 
+  CardContent, 
+  TextField, 
+  CircularProgress,
+  Alert
+} from "@mui/material";
 
 function ViewAttendance() {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [selectedDate, setSelectedDate] = useState("");
   const [dailyAttendance, setDailyAttendance] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleDateChange = (e) => {
-    const date = e.target.value;
+  const handleDateChange = async (e) => {
+    const date = e.target.value; // This will be in yyyy-mm-dd format
     setSelectedDate(date);
-    setDailyAttendance(fetchAttendanceByDate(date));
+    
+    if (!date || !user.sapId) {
+      setDailyAttendance([]);
+      return;
+    }
+    
+    setLoading(true);
+    setError("");
+    
+    try {
+      // Convert from yyyy-mm-dd to dd-mm-yyyy for backend
+      const [year, month, day] = date.split('-');
+      const formattedDate = `${day}-${month}-${year}`;
+      
+      const response = await fetch(
+        `http://localhost:5000/api/student/attendance/${user.sapId}?date=${formattedDate}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} - ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setDailyAttendance(data);
+    } catch (err) {
+      setError(err.message || "Failed to fetch attendance data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   return (
     <Box sx={{ padding: 3 }}>
       <Typography variant="h5" gutterBottom>
-        Check Attendance for a Particular Day
+        Check Attendance by Date
       </Typography>
+      
       <TextField
         label="Select Date"
         type="date"
         value={selectedDate}
         onChange={handleDateChange}
         InputLabelProps={{ shrink: true }}
-        sx={{ mb: 3 }}
+        sx={{ mb: 3, maxWidth: 300 }}
       />
-      <Grid container spacing={2}>
-        {selectedDate && dailyAttendance.length === 0 && (
-          <Typography sx={{ ml: 2, mt: 2 }}>
-            No attendance record found for this date.
-          </Typography>
-        )}
-        {dailyAttendance.map((item, idx) => (
-          <Grid item xs={12} sm={6} md={4} key={idx}>
-            <Card>
+
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {!loading && selectedDate && dailyAttendance.length === 0 && (
+        <Alert severity="info">
+          No attendance records found for {formatDate(selectedDate)}
+        </Alert>
+      )}
+
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        {dailyAttendance.map((record, index) => (
+          <Grid item xs={12} sm={6} md={4} key={index}>
+            <Card 
+              sx={{ 
+                height: '100%', 
+                borderTop: `4px solid ${record.status === 'Present' ? '#4caf50' : '#f44336'}`
+              }}
+            >
               <CardContent>
-                <Typography variant="subtitle1">{item.subject}</Typography>
-                <Typography
-                  color={item.status === "Present" ? "green" : "red"}
+                <Typography variant="h6" gutterBottom>
+                  {record.subject}
+                </Typography>
+                
+                <Typography 
+                  variant="subtitle1"
+                  color={record.status === "Present" ? "success.main" : "error.main"}
                   fontWeight="bold"
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                 >
-                  {item.status}
+                  {record.status === "Present" ? (
+                    <>
+                      <span style={{ fontSize: '1.2rem' }}>✓</span> Present
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '1.2rem' }}>✗</span> Absent
+                    </>
+                  )}
+                </Typography>
+
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                  Date: {formatDate(record.date)}
                 </Typography>
               </CardContent>
             </Card>
